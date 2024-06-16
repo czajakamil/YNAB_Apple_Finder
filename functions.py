@@ -1,14 +1,16 @@
 import os
 import subprocess
+import requests
+import json
 from datetime import datetime
-from pdf2image import convert_from_path
+from pdf2image import convert_from_path # type: ignore
 import base64
 import re
 
 def get_unique_filename(directory, filename):
     """
-    Generuje unikalną nazwę pliku w danym katalogu przez dodanie
-    numerowanego sufiksu do nazwy pliku, jeśli plik o podanej nazwie już istnieje.
+    Generuje unikalną nazwę pliku w danym katalogu.
+    Dodaje numerowany sufiks do nazwy pliku, jeśli plik o podanej nazwie już istnieje.
 
     Args:
         directory (str): Ścieżka do katalogu, w którym ma być zapisany plik.
@@ -97,8 +99,7 @@ def convert_pdfs_to_pngs(pdf_directory, output_directory):
         except Exception as e:
             print(f"Nie udało się zmienić nazwy {pdf_path}: {e}")
 
-
-def get_the_files_with_paths(directory):
+def get_the_files_for_ocr(directory):
     """
     Pobiera wszystkie pliki PNG z zadanego katalogu, które nie zaczynają się od 'DONE'.
 
@@ -111,7 +112,7 @@ def get_the_files_with_paths(directory):
     # Pobiera wszystkie pliki w katalogu
     files = os.listdir(directory)
     # Filtruje pliki, które nie zaczynają się od 'DONE' i mają rozszerzenie .png
-    filtered_files = [os.path.join(directory, file) for file in files if not file.startswith('DONE') and file.endswith('.png')]
+    filtered_files = [os.path.join(directory, file) for file in files if not file.startswith('DONE') and (file.endswith('.png') or file.endswith('.PNG'))]
     return filtered_files
 
 # Function to encode the image
@@ -200,6 +201,10 @@ def validate_json(data):
                 
                 # Validate total_price.after_discount
                 total_price_sum += item["total_price"]["after_discount"]
+
+                # Validate unit_of_measurement
+                if "unit_of_measurement" not in item or item["unit_of_measurement"] not in ["szt", "kg", "l", "m"]:
+                    errors.append("Pole 'items[].unit_of_measurement' powinno być jedną z wartości: 'szt', 'kg', 'l', 'm'.")
             
             # Check if sum of total_price.after_discount matches total
             if round(total_price_sum, 2) != round(transaction["total"], 2):
@@ -229,3 +234,45 @@ def validate_json(data):
     if not errors:
         return True
     return errors
+
+
+def load_prompt(file_path):
+    """Load prompt from a file."""
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+    
+
+def perform_ocr(api_key, prompt, base64_image):
+    """Perform OCR on a base64 image."""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{prompt}"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 4096
+    }
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    return response.json()
+
+def clean_ocr_response(response):
+    response = response['choices'][0]['message']['content']
+    cleaned_content = response.strip('```json\n').strip('\n```')
+    return json.loads(cleaned_content)
