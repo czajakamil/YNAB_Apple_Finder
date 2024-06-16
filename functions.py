@@ -3,6 +3,7 @@ import subprocess
 from datetime import datetime
 from pdf2image import convert_from_path
 import base64
+import re
 
 def get_unique_filename(directory, filename):
     """
@@ -117,3 +118,114 @@ def get_the_files_with_paths(directory):
 def encode_image(image_path):
   with open(image_path, "rb") as image_file:
     return base64.b64encode(image_file.read()).decode('utf-8')
+  
+
+def validate_json(data):
+    errors = []
+
+    # Validate basic structure
+    if not isinstance(data, dict):
+        errors.append("JSON powinien być obiektem.")
+        return errors
+
+    if "transactions" not in data:
+        errors.append("Brak klucza 'transactions'.")
+        return errors
+
+    transactions = data["transactions"]
+    if not isinstance(transactions, list):
+        errors.append("'transactions' powinien być listą.")
+        return errors
+
+    # Loop through each transaction to validate
+    for transaction in transactions:
+        # Validate required fields
+        required_fields = ["id", "receipt_number", "timestamp", "date", "store", "total", "taxes_total", "currency", "items", "comments", "category", "transaction_comment"]
+        for field in required_fields:
+            if field not in transaction:
+                errors.append(f"Brak klucza '{field}' w transakcji.")
+                continue
+        
+        # Validate types
+        if not isinstance(transaction["id"], str):
+            errors.append("Pole 'id' powinno być stringiem.")
+        
+        # Validate timestamp
+        try:
+            datetime.strptime(transaction["timestamp"], "%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            errors.append("Pole 'timestamp' ma nieprawidłowy format.")
+        
+        # Validate date
+        try:
+            datetime.strptime(transaction["date"], "%Y-%m-%d")
+        except ValueError:
+            errors.append("Pole 'date' ma nieprawidłowy format.")
+        
+        # Validate store information
+        store = transaction["store"]
+        if not isinstance(store, dict):
+            errors.append("Pole 'store' powinno być obiektem.")
+        else:
+            if "name" not in store or not isinstance(store["name"], str):
+                errors.append("Pole 'store.name' powinno być stringiem.")
+            if "address" not in store or not isinstance(store["address"], str):
+                errors.append("Pole 'store.address' powinno być stringiem.")
+            if "NIP" not in store or not re.match(r"^\d{10}$", store["NIP"]):
+                errors.append("Pole 'store.NIP' powinno mieć 10 cyfr.")
+        
+        # Validate total
+        if not isinstance(transaction["total"], (int, float)) or transaction["total"] < 0:
+            errors.append("Pole 'total' powinno być dodatnią liczbą.")
+        
+        # Validate currency
+        if not isinstance(transaction["currency"], str) or len(transaction["currency"]) != 3:
+            errors.append("Pole 'currency' powinno być trzyliterowym stringiem.")
+
+        # Validate items
+        items = transaction["items"]
+        if not isinstance(items, list):
+            errors.append("Pole 'items' powinno być listą.")
+        else:
+            total_price_sum = 0
+            for item in items:
+                if "name" not in item or not isinstance(item["name"], str):
+                    errors.append("Pole 'items[].name' powinno być stringiem.")
+                if "unit_price" not in item or not isinstance(item["unit_price"], dict):
+                    errors.append("Pole 'items[].unit_price' powinno być obiektem.")
+                if "quantity" not in item or not isinstance(item["quantity"], (int, float)):
+                    errors.append("Pole 'items[].quantity' powinno być liczbą.")
+                if "total_price" not in item or not isinstance(item["total_price"], dict):
+                    errors.append("Pole 'items[].total_price' powinno być obiektem.")
+                
+                # Validate total_price.after_discount
+                total_price_sum += item["total_price"]["after_discount"]
+            
+            # Check if sum of total_price.after_discount matches total
+            if round(total_price_sum, 2) != round(transaction["total"], 2):
+                errors.append("Suma 'total_price.after_discount' nie zgadza się z 'total'.")
+
+        # Validate taxes
+        taxes = transaction.get("taxes", [])
+        if not isinstance(taxes, list):
+            errors.append("Pole 'taxes' powinno być listą.")
+        else:
+            taxes_total_sum = 0
+            for tax in taxes:
+                if "type" not in tax or not isinstance(tax["type"], str):
+                    errors.append("Pole 'taxes[].type' powinno być stringiem.")
+                if "rate" not in tax or not isinstance(tax["rate"], (int, float)):
+                    errors.append("Pole 'taxes[].rate' powinno być liczbą.")
+                if "amount" not in tax or not isinstance(tax["amount"], (int, float)):
+                    errors.append("Pole 'taxes[].amount' powinno być liczbą.")
+                
+                # Sum the taxes amounts
+                taxes_total_sum += tax["amount"]
+            
+            # Check if sum of taxes amounts matches taxes_total
+            if round(taxes_total_sum, 2) != round(transaction.get("taxes_total", 0), 2):
+                errors.append("Suma 'taxes[].amount' nie zgadza się z 'taxes_total'.")
+
+    if not errors:
+        return True
+    return errors
