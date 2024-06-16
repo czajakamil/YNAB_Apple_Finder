@@ -35,7 +35,7 @@ Odpowiadaj tylko i wyłącznie w postaci JSON, korzystając z ponizszego szablon
       ],
       "items": [
         {
-		  "name": "3008948 wilg. chus.samochod.biodegradowalne C&c 1*4.49",  // Nazwa bezpośrednio 1:1 z paragoniu, bez żadnych przeinaczeń
+		  "name": "3008948 wilg. chus.samochod.biodegradowalne C&c 1*4.49",  // Nazwa bezpośrednio 1:1 z paragonu, bez żadnych przeinaczeń
 	      "name_simplified": "wilgotne chusteczki do samochododu", // Nazwa uproszczona,
           "unit_price": {
             "before_discount": 4.49,  // Cena jednostkowa przed zniżką
