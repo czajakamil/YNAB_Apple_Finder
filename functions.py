@@ -2,6 +2,7 @@ import os
 import subprocess
 from datetime import datetime
 from pdf2image import convert_from_path
+import base64
 
 def get_unique_filename(directory, filename):
     """
@@ -111,3 +112,8 @@ def get_the_files_with_paths(directory):
     # Filtruje pliki, które nie zaczynają się od 'DONE' i mają rozszerzenie .png
     filtered_files = [os.path.join(directory, file) for file in files if not file.startswith('DONE') and file.endswith('.png')]
     return filtered_files
+
+# Function to encode the image
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
